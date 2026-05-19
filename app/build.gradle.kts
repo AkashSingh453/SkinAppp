@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
     id("com.google.dagger.hilt.android")
     id("com.google.gms.google-services")
@@ -13,7 +14,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.skinappp"
-        minSdk = 24
+        minSdk = 26
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
@@ -62,10 +63,12 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.core.ktx)
     implementation(libs.play.services.location)
-    implementation(libs.tensorflow.lite.support)
-    implementation(libs.tensorflow.lite.metadata)
+    implementation(libs.tensorflow.lite)
+    implementation(libs.litert.support.api)
+    compileOnly("org.tensorflow:tensorflow-lite-api:2.17.0")
     implementation(libs.androidx.tools.core)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
@@ -90,8 +93,11 @@ dependencies {
     ksp(libs.androidx.hilt.compiler)
     implementation(libs.androidx.hilt.navigation.compose)
     implementation (libs.retrofit)
+    implementation(libs.retrofit.kotlinx.serialization)
+    implementation(libs.serialization.json)
     implementation (libs.converter.gson)
     implementation (libs.okhttp)
+    implementation(libs.security.crypto)
 
     // System Ui Color
     implementation(libs.accompanist.systemuicontroller)
@@ -103,11 +109,17 @@ dependencies {
     implementation(libs.coil)
 
     implementation(libs.androidx.compose.runtime.livedata)
+    //nkdksssssa
+    //khk
 
-    implementation("com.google.ai.edge.litert:litert:1.0.1")
-    implementation("com.google.ai.edge.litert:litert-support:1.0.1")
+    implementation(libs.coil.compose.v270)
 
-    implementation("io.coil-kt:coil-compose:2.7.0")
+    // Google Sign-In
+    implementation("com.google.android.gms:play-services-auth:21.2.0")
 
+    // Accompanist Permissions (runtime permission helpers)
+    implementation("com.google.accompanist:accompanist-permissions:0.36.0")
 
+    // Coroutine support for Google Play Tasks (FusedLocation await)
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
 }

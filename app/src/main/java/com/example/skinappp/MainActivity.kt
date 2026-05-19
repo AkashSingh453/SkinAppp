@@ -1,404 +1,309 @@
 package com.example.skinappp
 
-import android.Manifest
-import android.annotation.SuppressLint
-import android.app.Activity
-import android.graphics.ImageDecoder
-import android.net.Uri
-import android.os.Build
 import android.os.Bundle
-import android.provider.MediaStore
-import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.PickVisualMediaRequest
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.viewModels
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
-import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
-import coil.compose.AsyncImage
-import com.example.skinappp.data.Resource
-import com.example.skinappp.model.SavedAddress
+import com.example.skinappp.data.dto.Coordinates
+import com.example.skinappp.data.dto.Fees
+import com.example.skinappp.data.remote.SkinApiService
+import com.example.skinappp.domain.repository.AuthRepository
+import com.example.skinappp.ui.auth.AuthViewModel
+import com.example.skinappp.ui.doctors.DoctorViewModel
+import com.example.skinappp.ui.navigation.AppNavGraph
 import com.example.skinappp.ui.theme.SkinApppTheme
-import com.example.skinappp.viewModels.AddressViewModel
 import dagger.hilt.android.AndroidEntryPoint
-import java.io.File
-import kotlin.toString
-import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.Color
-import android.util.Log
-import android.widget.Button
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.privacysandbox.tools.core.model.Method
-import com.example.skinappp.ApiService.BackendApiService
-import com.example.skinappp.ml.Mobilenet
-import com.example.skinappp.viewModels.BackendViewModel
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaTypeOrNull
-import okhttp3.RequestBody.Companion.toRequestBody
-import org.tensorflow.lite.DataType
-import org.tensorflow.lite.support.image.ImageProcessor
-import org.tensorflow.lite.support.image.TensorImage
-import org.tensorflow.lite.support.image.ops.ResizeOp
-import org.tensorflow.lite.support.tensorbuffer.TensorBuffer
-import java.io.ByteArrayOutputStream
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-    val addViewModel: AddressViewModel by viewModels()
-    val gpsLauncher = registerForActivityResult(
-        ActivityResultContracts.StartIntentSenderForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            addViewModel.fetchLoc() // Retry after user turns on GPS
-        }
-    }
 
-    @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
+    @Inject
+    lateinit var authRepository: AuthRepository
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-//            val addViewModel: AddressViewModel = hiltViewModel()
-//            LaunchedEffect(Unit) {
-//                addViewModel.gpsLaunchSignal.collect { intentSenderRequest ->
-//                    gpsLauncher.launch(intentSenderRequest)
-//                }
-//            }
-            val modelName = "skin_disease_model.tflite"
-            val context = LocalContext.current
-            val classifier = DigitClassifier(context)
-
             SkinApppTheme {
-                Column(modifier = Modifier.fillMaxSize()) {
-              //      Greeting()
-                    ImagePickerScreen(classifier)
-              //      extracted(context)
-                }
-            }
-        }
-    }
-
-    @Composable
-    private fun extracted(context: Context) {
-        HorizontalDivider(
-            thickness = 50.dp
-        )
-        val BackendViewModel: BackendViewModel = hiltViewModel()
-        val backMessage by BackendViewModel.data.collectAsState()
-
-        val launcher = rememberLauncherForActivityResult(
-            contract = ActivityResultContracts.PickVisualMedia(),
-            onResult = { uri ->
-                uri?.let {
-                    val bitmap = try {
-                        MediaStore.Images.Media.getBitmap(context.contentResolver, it)
-                    } catch (e: Exception) {
-                        null
-                    }
-                    val stream = ByteArrayOutputStream()
-                    val success =
-                        bitmap?.compress(Bitmap.CompressFormat.JPEG, 90, stream)
-                    if (success == true) {
-                        val byteArray = stream.toByteArray()
-                        BackendViewModel.sendAuth(
-                            byteArray.toRequestBody(
-                                "image/jpeg".toMediaTypeOrNull(),
-                                0,
-                                byteArray.size
-                            )
-                        )
-                    }
-                }
-            }
-        )
-
-        Button(onClick = {
-            launcher.launch(
-                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-            )
-        }) {
-            Text("send to server")
-        }
-        when (backMessage) {
-            is Resource.Loading -> {
-                Text("mrfl")
-            }
-
-            is Resource.Error -> {
-                Text((backMessage as Resource.Error).exception.message.toString())
-            }
-
-            is Resource.Success -> {
-                Text((backMessage as Resource.Success).data.toString())
+               AppNavGraph(authRepository = authRepository)
+        //        DoctorSendScreen()
             }
         }
     }
 }
 
 @Composable
-fun Greeting(
-    addViewModel: AddressViewModel = hiltViewModel()
-) {
-    val res by addViewModel.data.collectAsState()
-    val sa by addViewModel.sa.collectAsState()
-    val context = LocalContext.current
-    val locationPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val isGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
-                permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
-
-        if (isGranted) {
-            // Permission Granted: Tell ViewModel to go to work!
-            addViewModel.fetchLoc()
-        } else {
-            Toast.makeText(context, "Location permission denied", Toast.LENGTH_SHORT).show()
+fun DoctorSendScreen(
+    viewModel: AuthViewModel = hiltViewModel()
+){
+    Button(
+        onClick = {
+           dummyDoctors.forEach {
+               viewModel.addDoctor(it)
+           }
         }
-    }
-
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Button(onClick = {
-            locationPermissionLauncher.launch(
-                arrayOf(
-                    Manifest.permission.ACCESS_FINE_LOCATION,
-                    Manifest.permission.ACCESS_COARSE_LOCATION
-                )
-            )
-        }) {
-            Text("Get Address")
-        }
-        when (res) {
-            is Resource.Loading -> {
-                Text("jndsk")
-            }
-
-            is Resource.Error -> {
-                val errorMsg = (res as Resource.Error).exception.message
-                Text(errorMsg.toString())
-            }
-
-            is Resource.Success -> {
-                val data_ = (res as Resource.Success).data.features.get(0).properties
-                Text(data_.city)
-            }
-        }
-        when (sa) {
-            is Resource.Loading -> {
-                Text("Loading")
-            }
-
-            is Resource.Error -> {
-                Text((sa as Resource.Error).exception.message.toString())
-            }
-
-            is Resource.Success -> {
-                (sa as Resource.Success<List<SavedAddress>>).data.forEach {
-                    Card(
-                        modifier = Modifier.clickable(
-                            onClick = {
-                                addViewModel.deltAddr(it)
-                            }
-                        )) {
-                        Text(text = it.toString())
-                    }
-                }
-
-            }
-        }
+    ){
+        Text("Send Doctors To database");
     }
 }
 
-@Composable
-fun ImagePickerScreen(classifier: DigitClassifier) {
-    val context = LocalContext.current
-    val model = Mobilenet.newInstance(context)
+@Serializable
+data class DoctorCreateRequest(
+    @SerialName("doctor_name") val doctorName: String,
+    @SerialName("phone_number") val phoneNumber: String,
+    @SerialName("experience_years") val experienceYears: Int,
+    val biography: String,
+    @SerialName("profile_image_url") val profileImageUrl: String? = null,
+    val rating: Double = 0.0,
+    val location: String,
+    val coordinates: Coordinates,
+    val fees: Fees,
+    @SerialName("working_hours") val workingHours: Map<String, List<String>> = emptyMap()
+)
 
 
-    var imageUri by remember { mutableStateOf<Uri?>(null) }
-    var tempUri by remember { mutableStateOf<Uri?>(null) }
-    var resultText by remember { mutableStateOf("Select an image to classify") }
-    val coroutinescope = rememberCoroutineScope()
-    val launcher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickVisualMedia(),
-        onResult = { uri ->
-            imageUri = uri
-            uri?.let {
-                val inputSize = 1 * 224 * 224 * 3 * 4
-                var buffer : ByteBuffer = ByteBuffer.allocateDirect(inputSize).apply {
-                    // TFLite requires the Native Byte Order (usually Little Endian)
-                    order(ByteOrder.nativeOrder())
-                }
-                coroutinescope.launch {
-                    val buff = coroutinescope.async { ImageUtils(context).uriToByteBuffer(uri) }
-                    buffer = buff.await()
-                }
-                val inputFeature0 = TensorBuffer.createFixedSize(intArrayOf(1, 224, 224, 3), DataType.FLOAT32)
-                inputFeature0.loadBuffer(buffer)
-                val bitmap = try {
-                    if (Build.VERSION.SDK_INT < 28) {
-                        MediaStore.Images.Media.getBitmap(context.contentResolver, it)
-                    } else {
-                        val source = ImageDecoder.createSource(context.contentResolver, it)
-                        ImageDecoder.decodeBitmap(source) { decoder, _, _ ->
-                            // Add this to prevent the "invalid input" error
-                            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
-                            decoder.isMutableRequired = true
-                        }
-                    }
-                } catch (e: Exception) {
-                    null
-                }
-                bitmap?.let { b ->
-                    resultText = classifier.classify(b)
-                }
-            }
-        }
+val dummyDoctors = listOf(
+    DoctorCreateRequest(
+        doctorName = "Dr. Aman Verma",
+        phoneNumber = "9876500001",
+        experienceYears = 12,
+        biography = "Experienced cardiologist specializing in preventive heart care.",
+        profileImageUrl = null,
+        rating = 4.7,
+        location = "Pandri, Raipur",
+        coordinates = Coordinates(21.2514, 81.6296),
+        fees = Fees(700),
+        workingHours = mapOf(
+            "Monday" to listOf("10:00 AM - 2:00 PM", "5:00 PM - 8:00 PM"),
+            "Tuesday" to listOf("10:00 AM - 2:00 PM")
+        )
+    ),
+    DoctorCreateRequest(
+        doctorName = "Dr. Neha Sharma",
+        phoneNumber = "9876500002",
+        experienceYears = 8,
+        biography = "Dermatologist with expertise in skin allergies and cosmetic treatments.",
+        profileImageUrl = null,
+        rating = 4.5,
+        location = "Shankar Nagar, Raipur",
+        coordinates = Coordinates(21.2510, 81.6675),
+        fees = Fees(500),
+        workingHours = mapOf(
+            "Monday" to listOf("9:00 AM - 1:00 PM"),
+            "Wednesday" to listOf("4:00 PM - 7:00 PM")
+        )
+    ),
+    DoctorCreateRequest(
+        doctorName = "Dr. Ravi Tiwari",
+        phoneNumber = "9876500003",
+        experienceYears = 15,
+        biography = "Orthopedic surgeon focusing on sports injuries and fractures.",
+        profileImageUrl = null,
+        rating = 4.8,
+        location = "Telibandha, Raipur",
+        coordinates = Coordinates(21.2395, 81.7012),
+        fees = Fees(900),
+        workingHours = mapOf(
+            "Tuesday" to listOf("11:00 AM - 3:00 PM"),
+            "Friday" to listOf("6:00 PM - 9:00 PM")
+        )
+    ),
+    DoctorCreateRequest(
+        doctorName = "Dr. Priya Nair",
+        phoneNumber = "9876500004",
+        experienceYears = 10,
+        biography = "Gynecologist and women's wellness consultant.",
+        profileImageUrl = null,
+        rating = 4.6,
+        location = "Civil Lines, Raipur",
+        coordinates = Coordinates(21.2408, 81.6521),
+        fees = Fees(650),
+        workingHours = mapOf(
+            "Monday" to listOf("10:00 AM - 1:00 PM"),
+            "Thursday" to listOf("5:00 PM - 8:00 PM")
+        )
+    ),
+    DoctorCreateRequest(
+        doctorName = "Dr. Saurabh Mishra",
+        phoneNumber = "9876500005",
+        experienceYears = 7,
+        biography = "General physician providing family healthcare services.",
+        profileImageUrl = null,
+        rating = 4.3,
+        location = "Mowa, Raipur",
+        coordinates = Coordinates(21.2618, 81.7140),
+        fees = Fees(400),
+        workingHours = mapOf(
+            "Monday" to listOf("9:00 AM - 12:00 PM"),
+            "Saturday" to listOf("5:00 PM - 8:00 PM")
+        )
+    ),
+
+    DoctorCreateRequest(
+        doctorName = "Dr. Kunal Agrawal",
+        phoneNumber = "9876500006",
+        experienceYears = 11,
+        biography = "Pediatrician with expertise in child nutrition and vaccinations.",
+        profileImageUrl = null,
+        rating = 4.7,
+        location = "Devendra Nagar, Raipur",
+        coordinates = Coordinates(21.2558, 81.6402),
+        fees = Fees(550),
+        workingHours = mapOf(
+            "Tuesday" to listOf("10:00 AM - 2:00 PM"),
+            "Friday" to listOf("4:00 PM - 7:00 PM")
+        )
+    ),
+
+    DoctorCreateRequest(
+        doctorName = "Dr. Simran Kaur",
+        phoneNumber = "9876500007",
+        experienceYears = 9,
+        biography = "ENT specialist experienced in sinus and hearing disorders.",
+        profileImageUrl = null,
+        rating = 4.4,
+        location = "Samta Colony, Raipur",
+        coordinates = Coordinates(21.2443, 81.6419),
+        fees = Fees(600),
+        workingHours = mapOf(
+            "Monday" to listOf("11:00 AM - 3:00 PM")
+        )
+    ),
+
+    DoctorCreateRequest(
+        doctorName = "Dr. Aditya Rao",
+        phoneNumber = "9876500008",
+        experienceYears = 14,
+        biography = "Neurologist focusing on migraine and epilepsy treatment.",
+        profileImageUrl = null,
+        rating = 4.9,
+        location = "VIP Road, Raipur",
+        coordinates = Coordinates(21.2527, 81.7345),
+        fees = Fees(1200),
+        workingHours = mapOf(
+            "Wednesday" to listOf("10:00 AM - 1:00 PM"),
+            "Saturday" to listOf("5:00 PM - 9:00 PM")
+        )
+    ),
+
+    DoctorCreateRequest(
+        doctorName = "Dr. Harshita Jain",
+        phoneNumber = "9876500009",
+        experienceYears = 6,
+        biography = "Dentist specializing in cosmetic and restorative dentistry.",
+        profileImageUrl = null,
+        rating = 4.2,
+        location = "Tatibandh, Raipur",
+        coordinates = Coordinates(21.2844, 81.6903),
+        fees = Fees(450),
+        workingHours = mapOf(
+            "Monday" to listOf("9:00 AM - 12:00 PM"),
+            "Thursday" to listOf("4:00 PM - 8:00 PM")
+        )
+    ),
+
+    DoctorCreateRequest(
+        doctorName = "Dr. Rohit Sen",
+        phoneNumber = "9876500010",
+        experienceYears = 18,
+        biography = "Senior pulmonologist with ICU and respiratory care experience.",
+        profileImageUrl = null,
+        rating = 4.8,
+        location = "Pachpedi Naka, Raipur",
+        coordinates = Coordinates(21.2239, 81.6535),
+        fees = Fees(1000),
+        workingHours = mapOf(
+            "Tuesday" to listOf("10:00 AM - 1:00 PM"),
+            "Friday" to listOf("6:00 PM - 8:00 PM")
+        )
+    ),
+
+    // Naya Raipur Entries
+
+    DoctorCreateRequest(
+        doctorName = "Dr. Meenal Kapoor",
+        phoneNumber = "9876500011",
+        experienceYears = 13,
+        biography = "Psychiatrist specializing in stress and anxiety management.",
+        profileImageUrl = null,
+        rating = 4.7,
+        location = "Sector 27, Naya Raipur",
+        coordinates = Coordinates(21.1612, 81.7870),
+        fees = Fees(850),
+        workingHours = mapOf(
+            "Monday" to listOf("11:00 AM - 2:00 PM")
+        )
+    ),
+
+    DoctorCreateRequest(
+        doctorName = "Dr. Vivek Dubey",
+        phoneNumber = "9876500012",
+        experienceYears = 9,
+        biography = "Diabetologist helping patients manage chronic diabetes care.",
+        profileImageUrl = null,
+        rating = 4.5,
+        location = "Sector 24, Naya Raipur",
+        coordinates = Coordinates(21.1704, 81.7762),
+        fees = Fees(700),
+        workingHours = mapOf(
+            "Tuesday" to listOf("10:00 AM - 2:00 PM")
+        )
+    ),
+
+    DoctorCreateRequest(
+        doctorName = "Dr. Nidhi Sinha",
+        phoneNumber = "9876500013",
+        experienceYears = 5,
+        biography = "Young physiotherapist specializing in rehabilitation therapy.",
+        profileImageUrl = null,
+        rating = 4.1,
+        location = "Sector 19, Naya Raipur",
+        coordinates = Coordinates(21.1791, 81.7640),
+        fees = Fees(350),
+        workingHours = mapOf(
+            "Monday" to listOf("8:00 AM - 12:00 PM")
+        )
+    ),
+
+    DoctorCreateRequest(
+        doctorName = "Dr. Rajeev Khanna",
+        phoneNumber = "9876500014",
+        experienceYears = 16,
+        biography = "Senior nephrologist with kidney disease management expertise.",
+        profileImageUrl = null,
+        rating = 4.8,
+        location = "Sector 21, Naya Raipur",
+        coordinates = Coordinates(21.1735, 81.7723),
+        fees = Fees(1100),
+        workingHours = mapOf(
+            "Wednesday" to listOf("10:00 AM - 1:00 PM")
+        )
+    ),
+
+    DoctorCreateRequest(
+        doctorName = "Dr. Pooja Bansal",
+        phoneNumber = "9876500015",
+        experienceYears = 8,
+        biography = "Ophthalmologist treating cataract and retina conditions.",
+        profileImageUrl = null,
+        rating = 4.6,
+        location = "Kamal Vihar, Raipur",
+        coordinates = Coordinates(21.1902, 81.6820),
+        fees = Fees(650),
+        workingHours = mapOf(
+            "Friday" to listOf("10:00 AM - 3:00 PM")
+        )
     )
 
-    val cameralauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.TakePicture(),
-        onResult = { succ ->
-            if (succ) {
-                imageUri = tempUri
-                val bitmap = try {
-                    if (Build.VERSION.SDK_INT < 28) {
-                        MediaStore.Images.Media.getBitmap(context.contentResolver, imageUri)
-                    } else {
-                        val source = ImageDecoder.createSource(context.contentResolver, imageUri!!)
-                        ImageDecoder.decodeBitmap(source) { decoder, _, _ ->
-                            // Add this to prevent the "invalid input" error
-                            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
-                            decoder.isMutableRequired = true
-                        }
-                    }
-                } catch (e: Exception) {
-                    null
-                }
-                bitmap?.let { b ->
-                    resultText = classifier.classify(b)
-                }
-            }
-        }
-    )
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Button(onClick = {
-            launcher.launch(
-                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-            )
-        }) {
-            Text("Select Image from Gallery")
-        }
-        Button(onClick = {
-            // 3. Create a temporary file and get its Uri via FileProvider
-            val uri = ComposeFileProvider.getImageUri(context)
-            tempUri = uri
-            cameralauncher.launch(uri)
-        }) {
-            Text("Take Photo for Analysis")
-        }
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        // Display the selected image
-        imageUri?.let {
-            AsyncImage(
-                model = it,
-                contentDescription = null,
-                modifier = Modifier
-                    .size(224.dp)
-                    .clip(RoundedCornerShape(8.dp))
-            )
-        }
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        Text(text = resultText, style = MaterialTheme.typography.bodyLarge)
-    }
-}
-
-class ComposeFileProvider : FileProvider() {
-    companion object {
-        fun getImageUri(context: Context): Uri {
-            val directory = File(context.cacheDir, "images")
-            directory.mkdirs()
-            val file = File.createTempFile("selected_image_", ".jpg", directory)
-            val authority = "${context.packageName}.fileprovider"
-            return getUriForFile(context, authority, file)
-        }
-    }
-}
+    // Continue similarly for remaining entries till 30...
+)
 
 
-class ImageUtils(private val context: Context) {
-
-    suspend fun uriToByteBuffer(uri: Uri): ByteBuffer = withContext(Dispatchers.IO) {
-        // 1. Open an input stream from the Uri
-        val inputStream = context.contentResolver.openInputStream(uri)
-        val bitmap = BitmapFactory.decodeStream(inputStream)
-        inputStream?.close()
-
-        // 2. Prepare the ImageProcessor (Matches your 224x224 model input)
-        val imageProcessor = ImageProcessor.Builder()
-            .add(ResizeOp(224, 224, ResizeOp.ResizeMethod.BILINEAR))
-            // Add NormalizeOp here if your model requires it (e.g., mean 127.5, std 127.5)
-            .build()
-
-        // 3. Convert Bitmap to TensorImage
-        var tensorImage = TensorImage(DataType.FLOAT32)
-        tensorImage.load(bitmap)
-        tensorImage = imageProcessor.process(tensorImage)
-
-        // 4. Return the underlying ByteBuffer
-        return@withContext tensorImage.buffer
-    }
-}
